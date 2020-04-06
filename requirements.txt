@@ -1,0 +1,11 @@
+category-encoders==2.1.0
+datawig==0.1.10
+matplotlib==3.1.2
+pandas==0.25.3
+scikit-learn==0.22.1
+seaborn==0.10.0
+scikit-optimize==0.7.4
+xgboost==0.90
+imbalanced-learn==0.6.2
+lightgbm==2.3.1
+mlxtend==0.17.0
