@@ -14,26 +14,40 @@ from src.preprocessing.imputation.missings_module import Missings
 
 
 class DataTreatment():
+    '''
+    This class preprocesses data following the mentioned steps:
+        - Reads the data correctly
+        - Splits the data into train and test sets
+        - Applies a categorical variable encoding
+        - Drops variable with constant values
+        - Applies feature engineering (interactions and transformations)
+        - Reduces data set memory
 
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        Data set containing the explanatory and target features.
+    target_name : string
+        Name of the target feature.
+
+    '''
     def __init__(self, data, target_name):
         self.targetName = target_name
-        data = self.target_correction(data)
-        data = self.types_correction(data)
-
+        data = self.correct_target_type(data)
+        data = DataTreatment.correct_decimal_separator(data)
         (self.trainX, self.testX,
-         self.trainY, self.testY) = self.data_split(data)
-        self.constant_features()
-        self.missings_imputation()
+         self.trainY, self.testY) = self.split_data(data)
+        self.drop_constant_features()
+        self.impute_missing_values()
         self.categories_checking()
         self.categoricalEncoding()
         self.featureScaling()
         self.trainX = self.reduceMemory(self.trainX)
         self.testX = self.reduceMemory(self.testX)
 
-    def target_correction(self, data):
+    def correct_target_type(self, data):
         '''
-        This function will convert the target variable from categorical to
-        1's and 0's
+        Convert target variable from categorical to 1's and 0's
 
         Parameters
         ----------
@@ -46,15 +60,16 @@ class DataTreatment():
             Input data with the target variable converted to numerical data.
 
         '''
+        data.rename(columns=lambda x: x.strip(), inplace=True)
         data[self.targetName] = data[self.targetName].astype('category')
         data[self.targetName] = data[self.targetName].cat.codes
 
         return data
 
-    def types_correction(self, data):
+    def correct_decimal_separator(data):
         '''
         In case the input DataFrame has any variable with ',' as decimal
-        indicator, the function will try to convert ',' into '.' and read
+        indicator, this function tries to convert ',' into '.' and read
         the variable as float.
 
         Parameters
@@ -70,15 +85,15 @@ class DataTreatment():
         '''
         for col in data.iloc[:, :-1].select_dtypes(exclude=np.number):
             try:
-                data[col] = (data[col].str.replace('.', '').
-                             str.replace(',', '.').astype('float'))
+                data[col] = data[col].str.replace(
+                    '.', '').str.replace(',', '.').astype('float')
             except (ValueError, AttributeError):
                 pass
         return data
 
-    def data_split(self, data):
+    def split_data(self, data):
         '''
-        This functions splits the data into Train and Test
+        Split the data into Train and Test sets.
 
         Parameters
         ----------
@@ -99,22 +114,14 @@ class DataTreatment():
         '''
         X = data.drop(self.targetName, axis=1).copy()
         y = data[self.targetName].copy()
+        trainX, testX, trainY, testY = train_test_split(
+             X, y, test_size=0.30, stratify=y, andom_state=52)
+        return trainX, testX, trainY, testY
 
-        if np.mean(y) < 0.35:
-            (trainX, testX,
-             trainY, testY) = (train_test_split(X, y, test_size=0.30,
-                                                stratify=y,
-                                                random_state=52))
-        else:
-            (trainX, testX,
-             trainY, testY) = (train_test_split(X, y, test_size=0.30,
-                                                random_state=52))
-        return (trainX, testX, trainY, testY)
-
-    def constant_features(self):
+    def drop_constant_features(self):
         '''
-        This function drops the constant columns in the Training set and maps
-        it to the test set.
+        Drop columns with constant values in training set and maps it to
+        test set.
 
         Returns
         -------
@@ -126,10 +133,10 @@ class DataTreatment():
         self.trainX = self.trainX.loc[:, data2keep]
         self.testX = self.testX.loc[:, data2keep]
 
-    def missings_imputation(self, method='simple'):
+    def impute_missing_values(self, method='simple'):
         '''
-        This function imputes the missing values of all variables using
-        the class Missings and the method selected (simple by default).
+        Impute the missing values of all variables using Missings's class
+        and the method selected (simple by default).
 
         Returns
         -------
@@ -146,9 +153,9 @@ class DataTreatment():
 
     def categories_checking(self, threshold=0.5):
         '''
-        This function drops categorical features that have too many values
-        to be an important feature i.e. a categorical feature that has 500
-        different values in a dataset with 1000 rows.
+        Drop categorical features with too many values to be an important
+        feature i.e. a categorical feature that has 500 different values in
+        a dataset with 1000 rows.
 
         Parameters
         ----------
