@@ -6,29 +6,49 @@ Created on Thu Dec 19 16:32:21 2019
 """
 
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, ExtraTreesClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.base import BaseEstimator, ClassifierMixin
 from xgboost import XGBClassifier
 
 
 class FeatureSelection(BaseEstimator, ClassifierMixin):
+    '''
+    This function selects the most important / predictive features of a
+    dataset based in an original ensemble variable importance framework.
+
+    Parameters
+    ----------
+    threshold : float
+        Threshold of variable importance selected to filter features. The
+        default is 0.1.
+
+    Returns
+    -------
+    None.
+
+    '''
 
     def __init__(self, threshold=0.1):
         self.threshold = threshold
 
     def fit(self, X, y):
         '''
-        This function appends the tree models feature importances into
-        a DataFrame.
+        Fit four models, append its feature importances into a DataFrame,
+        compute the importance score for each feature averaging all
+        importances and applying a cumulative sum and selects the ones above
+        the thershold.
 
         Parameters
         ----------
-        data : TYPE pandas.DataFrame
-            Input data.
+        X : pandas.DataFrame
+            Explanatory features data set.
+        y : pandas.DataFrame
+            Target feature data set.
 
         Returns
         -------
-        importances: TYPE pandas.DataFrame
+        importances: pandas.DataFrame
             Feature importance data.
         '''
         threshold = self.threshold
@@ -46,25 +66,26 @@ class FeatureSelection(BaseEstimator, ClassifierMixin):
         importances.sort_values(
             by=['importance_score'], inplace=True, ascending=False)
         importances = (
-            importances[importances['importance_score'].cumsum() /
-            importances['importance_score'].sum() < 1 - threshold])
+            importances[
+                importances['importance_score'].cumsum() /
+                importances['importance_score'].sum() < 1 - threshold])
         self.importances = importances
         return self
 
     def transform(self, X):
         '''
-        This function applies the fitted model and performs feature
-        selection on the original dataset.
+        Apply the fitted model and performs feature selection on the original
+        dataset.
 
         Parameters
         ----------
-        data : TYPE pandas.DataFrame
-            Input data.
+        X : pandas.DataFrame
+            Explanatory features data set.
 
         Returns
         -------
-        importances: TYPE pandas.DataFrame
-            Feature importance data.
+        variables_selected: pandas.DataFrame
+            Data set with the selected features.
         '''
         importances = self.importances
         features_list = importances.index.values.tolist()
