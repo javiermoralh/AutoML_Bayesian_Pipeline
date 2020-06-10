@@ -5,11 +5,11 @@ Created on Sun Jan 12 18:11:27 2020
 @author: javier.moral.hernan1
 """
 import numpy as np
+import warnings
+import category_encoders as ce
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.exceptions import DataConversionWarning
-import category_encoders as ce
-import warnings
 from src.preprocessing.imputation.missings_module import Missings
 
 
@@ -18,10 +18,12 @@ class DataTreatment():
     This class preprocesses data following the mentioned steps:
         - Reads the data correctly
         - Splits the data into train and test sets
+        - Drops features with constant values
+        - Imputes missing values
+        - Drops features with to many categories
         - Applies a categorical variable encoding
-        - Drops variable with constant values
-        - Applies feature engineering (interactions and transformations)
-        - Reduces data set memory
+        - Scales continuous features
+        - Reduces data memory
 
     Parameters
     ----------
@@ -35,15 +37,15 @@ class DataTreatment():
         self.targetName = target_name
         data = self.correct_target_type(data)
         data = DataTreatment.correct_decimal_separator(data)
-        (self.trainX, self.testX,
-         self.trainY, self.testY) = self.split_data(data)
+        (self.X_train, self.X_test,
+         self.y_train, self.y_test) = self.split_data(data)
         self.drop_constant_features()
         self.impute_missing_values()
-        self.categories_checking()
-        self.categoricalEncoding()
-        self.featureScaling()
-        self.trainX = self.reduceMemory(self.trainX)
-        self.testX = self.reduceMemory(self.testX)
+        self.check_categories()
+        self.categorical_encoding()
+        self.scale_features()
+        self.X_train = self.reduce_memory(self.X_train)
+        self.X_test = self.reduce_memory(self.X_test)
 
     def correct_target_type(self, data):
         '''
@@ -66,6 +68,7 @@ class DataTreatment():
 
         return data
 
+    @staticmethod
     def correct_decimal_separator(data):
         '''
         In case the input DataFrame has any variable with ',' as decimal
@@ -102,21 +105,21 @@ class DataTreatment():
 
         Returns
         -------
-        trainX : TYPE pandas.DataFrame
+        X_train : TYPE pandas.DataFrame
             features of the training sample.
-        testX : TYPE
+        X_test : TYPE
             features of the testing sample.
-        trainY : TYPE
+        y_train : TYPE
             target of the training sample..
-        testY : TYPE
+        y_test : TYPE
             target of the testing sample.
 
         '''
         X = data.drop(self.targetName, axis=1).copy()
         y = data[self.targetName].copy()
-        trainX, testX, trainY, testY = train_test_split(
-             X, y, test_size=0.30, stratify=y, andom_state=52)
-        return trainX, testX, trainY, testY
+        X_train, X_test, y_train, y_test = train_test_split(
+             X, y, test_size=0.30, stratify=y, andom_state=42)
+        return X_train, X_test, y_train, y_test
 
     def drop_constant_features(self):
         '''
@@ -129,9 +132,9 @@ class DataTreatment():
 
         '''
         print('Cleaning data...')
-        data2keep = (self.trainX != self.trainX.iloc[0]).any()
-        self.trainX = self.trainX.loc[:, data2keep]
-        self.testX = self.testX.loc[:, data2keep]
+        data2keep = (self.X_train != self.X_train.iloc[0]).any()
+        self.X_train = self.X_train.loc[:, data2keep]
+        self.X_test = self.X_test.loc[:, data2keep]
 
     def impute_missing_values(self, method='simple'):
         '''
@@ -143,15 +146,15 @@ class DataTreatment():
         None.
         '''
         print('Imputing missing...')
-        imputer = Missings(self.trainX, self.testX)
+        imputer = Missings(self.X_train, self.X_test)
         if method == 'simple':
-            (self.trainX, self.testX) = imputer.simple_imputation()
+            (self.X_train, self.X_test) = imputer.simple_imputation()
         if method == 'datawig':
-            (self.trainX, self.testX) = imputer.datawig_imputation()
+            (self.X_train, self.X_test) = imputer.datawig_imputation()
         if method == 'delete':
-            (self.trainX, self.testX) = imputer.delete_missings()
+            (self.X_train, self.X_test) = imputer.delete_missings()
 
-    def categories_checking(self, threshold=0.5):
+    def check_categories(self, threshold=0.5):
         '''
         Drop categorical features with too many values to be an important
         feature i.e. a categorical feature that has 500 different values in
@@ -167,56 +170,57 @@ class DataTreatment():
         None.
 
         '''
-        data = self.trainX.copy()
+        data = self.X_train.copy()
         nrows = len(data)
         dropped = []
         for col in data.iloc[:, :-1].select_dtypes(exclude=np.number):
             if (data[col].nunique()/nrows) > threshold:
                 dropped.append(col)
         data.drop(labels=dropped, axis=1, inplace=True)
-        self.trainX = data
-        self.testX = self.testX.drop(labels=dropped, axis=1)
+        self.X_train = data
+        self.X_test = self.X_test.drop(labels=dropped, axis=1)
 
-    def featureScaling(self):
+    def categorical_encoding(self):
         '''
-        Scale train & test data
+        Encode X_train and X_test categorical features using Catboost encoder.
 
         Returns
         -------
         None.
 
         '''
-        X_train = self.trainX.select_dtypes(include=np.number)
-        self.numeric_features = list(X_train.columns.values)
-        warnings.filterwarnings(action='ignore',
-                                category=DataConversionWarning)
-        scaler = MinMaxScaler()
-        scaler = MinMaxScaler()
-        self.trainX[self.numeric_features] = (
-            scaler.fit_transform(self.trainX[self.numeric_features]))
-        self.testX[self.numeric_features] = (
-            scaler.transform(self.testX[self.numeric_features]))
-        warnings.filterwarnings(action='default',
-                                category=DataConversionWarning)
+        catEncoder = ce.CatBoostEncoder(
+            drop_invariant=True, return_df=True, random_state=2020)
+        catEncoder.fit(self.X_train, self.y_train)
+        self.X_train = catEncoder.transform(self.X_train)
+        self.X_test = catEncoder.transform(self.X_test)
 
-    def categoricalEncoding(self):
+    def scale_features(self):
         '''
-        Numerical encoding for categorical data with Catboost.
+        Scale X_train and X_test numerical data using a Min-Max scaling.
 
         Returns
         -------
         None.
 
         '''
-        catEncoder = ce.CatBoostEncoder(drop_invariant=True, return_df=True,
-                                        random_state=2020)
-        catEncoder.fit(self.trainX, self.trainY)
-        self.trainX = catEncoder.transform(self.trainX)
-        self.testX = catEncoder.transform(self.testX)
+        self.numeric_features = list(
+            self.X_train.select_dtypes(include=np.number).columns.values)
+        warnings.filterwarnings(
+            action='ignore', category=DataConversionWarning)
+        scaler = MinMaxScaler()
+        self.X_train[self.numeric_features] = (
+            scaler.fit_transform(self.X_train[self.numeric_features]))
+        self.X_test[self.numeric_features] = (
+            scaler.transform(self.X_test[self.numeric_features]))
+        warnings.filterwarnings(
+            action='default', category=DataConversionWarning)
 
-    def reduceMemory(self, df):
+    @staticmethod
+    def reduce_memory(df):
         '''
-        Reduces de memory used by the input DataFrame
+        Reduce X_train and X_test datasets memory by correctly limiting its
+        column types.
 
         Parameters
         ----------
@@ -262,5 +266,4 @@ class DataTreatment():
         end_mem = df.memory_usage().sum() / 1024**2
         print('Mem. usage decreased to {:5.2f} Mb ({:.1f}% reduction)'.format(
             end_mem, 100 * (start_mem - end_mem) / start_mem))
-
         return df
