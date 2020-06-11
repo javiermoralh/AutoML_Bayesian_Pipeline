@@ -12,8 +12,23 @@ from skopt.space import Real, Integer
 from mlxtend.classifier import StackingCVClassifier
 
 
-class StackingModel():
+class Stacking():
+    '''
+    This class creates a stacking classifier with the base models and
+    meta-model setected.
 
+    Parameters
+    ----------
+    classifiers : list
+        List of the ensmeble base models selected.
+    meta_classifier : str
+        Name of the meta-model selected.
+
+    Returns
+    -------
+    None.
+
+    '''
     def __init__(self, classifiers, meta_classifier):
         print('Building Stacking Ensemble')
         self.models = {'rf': RandomForestClassifier(),

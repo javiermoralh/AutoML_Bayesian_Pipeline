@@ -19,7 +19,21 @@ warnings.filterwarnings('ignore')
 
 
 class AutoML():
+    '''
+    
 
+    Parameters
+    ----------
+    data : TYPE
+        DESCRIPTION.
+    target_name : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    '''
     def __init__(self, data, target_name):
         start_time = time.time()
         self.data = data
@@ -33,13 +47,7 @@ class AutoML():
 
     def data_preprocess(self):
         '''
-        Applies DataTreatment's class functions:
-        - Reads the data correctly
-        - Splits the data into train and test sets
-        - Applies a categorical variable encoding
-        - Drops variable with constant values
-        - Applies feature engineering (interactions and transformations)
-        - Reduces data set memory
+        Applies DataTreatment's preprocessing.
 
         Returns
         -------
