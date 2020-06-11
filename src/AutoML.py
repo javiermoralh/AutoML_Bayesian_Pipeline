@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 from skopt import BayesSearchCV
 from src.feature_selection.feature_selection_module import FeatureSelection
 from src.preprocessing.datatreatment_module import DataTreatment
-from src.models.stacking_module import StackingModel
+from src.models.stacking_module import Stacking
 from skopt.space import Real, Integer
 warnings.filterwarnings('ignore')
 
@@ -35,6 +35,7 @@ class AutoML():
     None.
 
     '''
+
     def __init__(self, data, target_name):
         start_time = time.time()
         self.data = data
@@ -42,7 +43,7 @@ class AutoML():
         self.preprocess_data()
         self.create_stacking()
         self.build_pipeline()
-        self.pipeline_optimization()
+        self.optimize_pipeline()
         self.model_selection()
         print('Time needed: {} sec'.format(round(time.time()-start_time), 2))
 
@@ -71,11 +72,11 @@ class AutoML():
         None.
 
         '''
-        self.classifiers = [ 'random_forest',
+        self.classifiers = ['random_forest',
                             'gradient_boosting',
                             'elastic_net']
         self.mc = 'gradient_boosting'
-        self.stacking = StackingModel(classifiers, mc)
+        self.stacking = Stacking(self.classifiers, self.mc)
 
     def build_pipeline(self):
         '''
@@ -93,11 +94,12 @@ class AutoML():
             ('feature_selection', FeatureSelection()),
             ('stacking', self.stacking.model)])
 
-    def obtain_param_grid(self):
+    def get_param_grid(self):
         '''
-        Builds pipeline's param grid dictionary to be appendend 
-        in cross validation depending on the models selected. It also includes
-        the feature selection hyperparameters.
+        Builds pipeline's param grid dictionary to be appendend in pipeline in
+        order to optimize hyperparameters using Bayes Search with cross
+        validation depending on the models selected. It also includes the
+        feature selection hyperparameters.
 
         Returns
         -------
@@ -108,59 +110,79 @@ class AutoML():
         for element in self.classifiers + [self.mc]:
             if element == 'random_forest':
                 object_name = 'randomforestclassifier'
-                param_rf = {
+                param_dict = {
                     'max_depth': Integer(10, 50, None),
                     'min_samples_split': Integer(2, 20, None),
-                    'sn_estimators': Integer(10, 200, None),
+                    'n_estimators': Integer(10, 200, None),
                     'bootstrap': [True, False]}
-                
-        self.pipeline = Pipeline(steps=[
-            ('fs', FeatureSelection()), ('sclf', self.stacking.model)])
+            if element == 'gradient_boosting':
+                object_name = 'gradientboostingclassifier'
+                param_dict = {
+                    'max_depth': Integer(10, 50, None),
+                    'validation_fraction': Real(0.1, 0.3, None),
+                    'n_iter_no_change': Integer(1, 3, None),
+                    'min_samples_split': Integer(3, 30, None),
+                    'n_estimators': Integer(10, 200, None)}
+            if element == 'svc':
+                object_name = 'svc'
+                param_dict = {
+                    'gamma': Real(1e-5, 1e-3, None),
+                    'C': Integer(1, 10000, None)}
+            if element == 'elastic_net':
+                object_name = 'sgdclassifier'
+                param_dict = {
+                    'alpha': Real(1e-8, 10, None),
+                    'l1_ratio': Real(0.0, 0.5, None)}
+            for key, value in param_dict.items():
+                pipeline_key = 'stacking__' + object_name + '__' + key
+                param_grid[pipeline_key] = value
+        param_grid.update({'feature_selection__threshold': Real(0, 0.9, None)})
+        return param_grid
 
-    def pipeline_optimization(self):
+    def optimize_pipeline(self):
         '''
         Trains the full pipeline applying Bayes Optimization and Cross
-        Validation in order to get the optimal hyperparameter combination.
+        Validation in order to get the optimal hyperparameters combination.
 
         Returns
         -------
         None.
 
         '''
-        (X_train_aux, X_val,
-         y_train_aux, y_val) = train_test_split(
+        (X_train_aux, X_val, y_train_aux, y_val) = train_test_split(
              self.X_train, self.y_train, test_size=0.25,
              random_state=42, stratify=self.y_train)
-        self.bayes_model = BayesSearchCV(
-            self.pipeline, [(self.stacking.param_grid)], scoring='roc_auc',
-            cv=3, refit=True,  n_jobs=-1, verbose=10, iid=True,
-            return_train_score=True, n_points=25,
-            n_iter=40)
-        self.gbm_model = XGBClassifier()
+        param_grid = self.get_param_grid()
+        bayes_model = BayesSearchCV(
+            self.pipeline, param_grid, scoring='roc_auc', cv=3, refit=True,
+            n_jobs=-1, verbose=10, iid=True, return_train_score=True,
+            n_points=25, _iter=40)
+
         print('Training full pipeline...')
-        self.bayes_model.fit(X_train_aux, y_train_aux)
+        bayes_model.fit(X_train_aux, y_train_aux)
+        self.best_params = bayes_model.best_params_
 
         # Select between the 3 best Bayes combination
-        aux_params = pd.DataFrame(
-            self.bayes_model.cv_results_).sort_values(
-                by='mean_test_score', ascending=False)
-        combinations = [aux_params.iloc[0]['params'],
-                        aux_params.iloc[1]['params'],
-                        aux_params.iloc[2]['params']]
-        aucs_val = []
-        for combination in combinations:
-            self.pipeline.set_params(**combination)
-            self.pipeline.fit(X_train_aux, y_train_aux)
-            preds_comb = self.pipeline.predict(X_val)
-            aucs_val.append(roc_auc_score(y_val, preds_comb))
-        print(['%.4f' % elem for elem in aucs_val])
-        self.best_params = aux_params['params'].iloc[
-            aucs_val.index(max(aucs_val))]
+        # aux_params = pd.DataFrame(
+        #     self.bayes_model.cv_results_).sort_values(
+        #         by='mean_test_score', ascending=False)
+        # combinations = [aux_params.iloc[0]['params'],
+        #                 aux_params.iloc[1]['params'],
+        #                 aux_params.iloc[2]['params']]
+        # aucs_val = []
+        # for combination in combinations:
+        #     self.pipeline.set_params(**combination)
+        #     self.pipeline.fit(X_train_aux, y_train_aux)
+        #     preds_comb = self.pipeline.predict(X_val)
+        #     aucs_val.append(roc_auc_score(y_val, preds_comb))
+        # print(['%.4f' % elem for elem in aucs_val])
+        # self.best_params = aux_params['params'].iloc[
+        #     aucs_val.index(max(aucs_val))]
 
-    def model_selection(self):
+    def select_best_model(self):
         '''
-        Selects between the trained model and Extreme Gradient Boosting
-        Classifier and computes predictions on test data.
+        Compare the optimized pipeline with a default Extreme Gradient
+        Boosting Classifier selects the one with higher AUC on validation set.
 
         Returns
         -------
@@ -174,27 +196,39 @@ class AutoML():
              random_state=42, stratify=self.y_train)
         self.pipeline.set_params(**self.best_params)
         self.pipeline.fit(X_train_aux, y_train_aux)
-        self.gbm_model.fit(X_train_aux, y_train_aux)
+        xgboost_model = XGBClassifier(max_depth=7, n_jobs=-1)
+        xgboost_model.fit(X_train_aux, y_train_aux)
 
         # Predict on validation set
         preds_stck = self.pipeline.predict(X_val)
-        preds_gbm = self.gbm_model.predict(X_val)
+        preds_xgb = xgboost_model.predict(X_val)
         score_stck = roc_auc_score(y_val, preds_stck)
-        score_gbm = roc_auc_score(y_val, preds_gbm)
-        print('Stacking val score: {}, XGBOOST val score: {}'
-              .format(round(score_stck, 4), round(score_gbm, 4)))
+        score_xgb = roc_auc_score(y_val, preds_xgb)
+        print('Stacking validation score: {}, XGBOOST validation score: {}'
+              .format(round(score_stck, 4), round(score_xgb, 4)))
 
         # Select best model and re-train with the whole train set
-        if score_stck > score_gbm:
+        if score_stck > score_xgb:
             self.pipeline.set_params(**self.best_params)
             self.pipeline.fit(self.X_train, self.y_train)
-            preds = self.pipeline.predict(self.X_test)
+            self.best_model = self.pipeline
         else:
-            self.gbm_model.fit(self.X_train, self.y_train)
-            preds = self.gbm_model.predict(self.X_test)
-        self.auc = roc_auc_score(self.y_test, preds)
+            xgboost_model.fit(self.X_train, self.y_train)
+            self.best_model = xgboost_model
 
-    def prediction(self):
+    def get_prediction(self):
+        '''
+        Returns the best model's test prediction.
+
+        Returns
+        -------
+        None.
+
+        '''
+        test_prediction = self.best_model.predict(self.X_test)
+        return test_prediction
+
+    def get_score(self):
         '''
         Returns the best model's AUC test score.
 
@@ -203,5 +237,7 @@ class AutoML():
         None.
 
         '''
-        print('Test prediction score {}'.format(round(self.auc, 4)))
-        return self.auc
+        test_prediction = self.best_model.predict(self.X_test)
+        auc_score = roc_auc_score(self.y_test, test_prediction)
+        print('Test prediction score {}'.format(round(auc_score, 4)))
+        return auc_score
