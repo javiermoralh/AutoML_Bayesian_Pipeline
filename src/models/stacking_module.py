@@ -9,7 +9,8 @@ from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import SGDClassifier
 from skopt.space import Real, Integer
-from mlxtend.classifier import StackingCVClassifier
+# from mlxtend.classifier import StackingCVClassifier
+from sklearn.ensemble import StackingClassifier
 
 
 class Stacking():
@@ -39,7 +40,7 @@ class Stacking():
         self.classifiers_list = classifiers
         self.meta_classifier = meta_classifier
         self.param_grid_building()
-        self.clfs, self.mc = self.models_selection()
+        self.clfs, self.mc = self.map_models()
         self.model = self.stacking_building()
 
     def param_grid_building(self):
@@ -92,36 +93,34 @@ class Stacking():
             0, 0.025, 0.35, 0.05, 0.075, 0.085, 0.1, 0.125, 0.15, 0.175,
             0.2, 0.225, 0.25, 0.275, 0.3, 0.4, 0.5, 0.6, 0.7]})
 
-    def models_selection(self):
+    def map_models(self):
         '''
-        This function selects the models to be included in the Stacking
-        depending on the parameters selected.
+        Map the strings of the selected models to python objects to be
+        included in the Stacking.
 
         Returns
         -------
-        classifiers_models : List
+        classifiers_models : list
             Stacking base classifiers list.
-        meta_clf : TYPE
+        meta_clf : scikit-learn object
             Stacking meta-classifier.
         '''
-        classifiers_models = []
-        for clf in self.classifiers_list:
-            classifiers_models.append(self.models[clf])
+        classifiers_models = [
+            self.models[clf] for clf in self.classifiers_list]
         meta_clf = self.models[self.meta_classifier]
         return classifiers_models, meta_clf
 
     def stacking_building(self):
         '''
-        This function creates the full Stacking classifier model based
-        on selected parameters.
+        Create the full Stacking classifier.
 
         Returns
         -------
         sclf : mlxtend.classifier
 
         '''
-        clfs = self.clfs
-        mc = self.mc
-        sclf = StackingCVClassifier(
-            classifiers=clfs, meta_classifier=mc, random_state=42,  n_jobs=-1)
+        # sclf = StackingCVClassifier(
+        #     classifiers=self.clfs, meta_classifier=self.mc, random_state=42,  n_jobs=-1)
+        sclf = StackingClassifier(
+            estimators=self.clfs, final_estimator=self.mc, n_jobs=-1, cv=3)
         return sclf
