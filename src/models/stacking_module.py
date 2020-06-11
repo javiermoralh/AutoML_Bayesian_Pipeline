@@ -32,11 +32,11 @@ class Stacking():
     '''
     def __init__(self, classifiers, meta_classifier):
         print('Building Stacking Ensemble')
-        self.models = {'rf': RandomForestClassifier(),
-                       'gbm': GradientBoostingClassifier(),
+        self.models = {'random_forest': RandomForestClassifier(),
+                       'gradient_boosting': GradientBoostingClassifier(),
                        'svc': SVC(),
-                       'elasticnet': SGDClassifier(penalty='elasticnet'),
-                       'lr': LogisticRegression()}
+                       'elastic_net': SGDClassifier(penalty='elasticnet'),
+                       'logistic_regression': LogisticRegression()}
         self.classifiers_list = classifiers
         self.meta_classifier = meta_classifier
         self.param_grid_building()

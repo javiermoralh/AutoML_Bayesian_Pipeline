@@ -15,19 +15,20 @@ from skopt import BayesSearchCV
 from src.feature_selection.feature_selection_module import FeatureSelection
 from src.preprocessing.datatreatment_module import DataTreatment
 from src.models.stacking_module import StackingModel
+from skopt.space import Real, Integer
 warnings.filterwarnings('ignore')
 
 
 class AutoML():
     '''
-    
+    This class ...
 
     Parameters
     ----------
-    data : TYPE
-        DESCRIPTION.
-    target_name : TYPE
-        DESCRIPTION.
+    data : pandas.DataFrame
+        Input data set to perform AutoML process.
+    target_name : str
+        Name of the target feature.
 
     Returns
     -------
@@ -38,16 +39,16 @@ class AutoML():
         start_time = time.time()
         self.data = data
         self.target_name = target_name
-        self.data_preprocess()
-        self.stacking_creation()
-        self.pipeline_building()
+        self.preprocess_data()
+        self.create_stacking()
+        self.build_pipeline()
         self.pipeline_optimization()
         self.model_selection()
         print('Time needed: {} sec'.format(round(time.time()-start_time), 2))
 
-    def data_preprocess(self):
+    def preprocess_data(self):
         '''
-        Applies DataTreatment's preprocessing.
+        Apply DataTreatment's preprocessing.
 
         Returns
         -------
@@ -55,14 +56,14 @@ class AutoML():
 
         '''
         data = DataTreatment(self.data, target_name=self.target_name)
-        self.X_train = data.trainX
-        self.y_train = data.trainY
-        self.X_test = data.testX
-        self.y_test = data.testY
+        self.X_train = data.X_train
+        self.y_train = data.y_train
+        self.X_test = data.X_test
+        self.y_test = data.y_test
 
-    def stacking_creation(self):
+    def create_stacking(self):
         '''
-        Builds an stacking model based on the base classifiers and
+        Build an stacking classifier using the base classifiers and
         meta-classifier defined.
 
         Returns
@@ -70,13 +71,15 @@ class AutoML():
         None.
 
         '''
-        classifiers = ['rf', 'gbm', 'svc']
-        mc = 'gbm'
+        self.classifiers = [ 'random_forest',
+                            'gradient_boosting',
+                            'elastic_net']
+        self.mc = 'gradient_boosting'
         self.stacking = StackingModel(classifiers, mc)
 
-    def pipeline_building(self):
+    def build_pipeline(self):
         '''
-        Designs the full pipeline to be optimized with the following steps:
+        Compile the full pipeline to be optimized with the following steps:
 
         - Feature Selection
         - Predictive Model
@@ -86,6 +89,31 @@ class AutoML():
         None.
 
         '''
+        self.pipeline = Pipeline(steps=[
+            ('feature_selection', FeatureSelection()),
+            ('stacking', self.stacking.model)])
+
+    def obtain_param_grid(self):
+        '''
+        Builds pipeline's param grid dictionary to be appendend 
+        in cross validation depending on the models selected. It also includes
+        the feature selection hyperparameters.
+
+        Returns
+        -------
+        None.
+
+        '''
+        param_grid = {}
+        for element in self.classifiers + [self.mc]:
+            if element == 'random_forest':
+                object_name = 'randomforestclassifier'
+                param_rf = {
+                    'max_depth': Integer(10, 50, None),
+                    'min_samples_split': Integer(2, 20, None),
+                    'sn_estimators': Integer(10, 200, None),
+                    'bootstrap': [True, False]}
+                
         self.pipeline = Pipeline(steps=[
             ('fs', FeatureSelection()), ('sclf', self.stacking.model)])
 
@@ -103,21 +131,11 @@ class AutoML():
          y_train_aux, y_val) = train_test_split(
              self.X_train, self.y_train, test_size=0.25,
              random_state=42, stratify=self.y_train)
-        if self.X_train.memory_usage().sum() / 1024**2 >= 4:
-            bayes_opt_points = 35
-            bayes_opt_iter = 50
-        elif (self.X_train.memory_usage().sum() / 1024**2 > 2.5
-              and self.X_train.memory_usage().sum() / 1024**2 < 4):
-            bayes_opt_points = 45
-            bayes_opt_iter = 70
-        elif self.X_train.memory_usage().sum() / 1024**2 <= 2.5:
-            bayes_opt_points = 80
-            bayes_opt_iter = 120
         self.bayes_model = BayesSearchCV(
             self.pipeline, [(self.stacking.param_grid)], scoring='roc_auc',
             cv=3, refit=True,  n_jobs=-1, verbose=10, iid=True,
-            return_train_score=True, n_points=bayes_opt_points,
-            n_iter=bayes_opt_iter)
+            return_train_score=True, n_points=25,
+            n_iter=40)
         self.gbm_model = XGBClassifier()
         print('Training full pipeline...')
         self.bayes_model.fit(X_train_aux, y_train_aux)
