@@ -42,9 +42,9 @@ class AutoML():
         self.target_name = target_name
         self.preprocess_data()
         self.create_stacking()
-        self.build_pipeline()
+        self.compile_pipeline()
         self.optimize_pipeline()
-        self.model_selection()
+        self.select_best_model()
         print('Time needed: {} sec'.format(round(time.time()-start_time), 2))
 
     def preprocess_data(self):
@@ -78,7 +78,7 @@ class AutoML():
         self.mc = 'gradient_boosting'
         self.stacking = Stacking(self.classifiers, self.mc)
 
-    def build_pipeline(self):
+    def compile_pipeline(self):
         '''
         Compile the full pipeline to be optimized with the following steps:
 

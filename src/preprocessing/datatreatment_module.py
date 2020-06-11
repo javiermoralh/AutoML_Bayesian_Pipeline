@@ -44,8 +44,8 @@ class DataTreatment():
         self.check_categories()
         self.categorical_encoding()
         self.scale_features()
-        self.X_train = self.reduce_memory(self.X_train)
-        self.X_test = self.reduce_memory(self.X_test)
+        self.X_train = DataTreatment.reduce_memory(self.X_train)
+        self.X_test = DataTreatment.reduce_memory(self.X_test)
 
     def correct_target_type(self, data):
         '''
@@ -118,7 +118,7 @@ class DataTreatment():
         X = data.drop(self.targetName, axis=1).copy()
         y = data[self.targetName].copy()
         X_train, X_test, y_train, y_test = train_test_split(
-             X, y, test_size=0.30, stratify=y, andom_state=42)
+             X, y, test_size=0.30, stratify=y, random_state=42)
         return X_train, X_test, y_train, y_test
 
     def drop_constant_features(self):
