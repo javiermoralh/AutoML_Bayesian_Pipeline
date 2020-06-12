@@ -9,3 +9,4 @@ xgboost==0.90
 imbalanced-learn==0.6.2
 lightgbm==2.3.1
 mlxtend==0.17.0
+pandas==1.0.4

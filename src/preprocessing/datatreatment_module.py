@@ -170,6 +170,7 @@ class DataTreatment():
         None.
 
         '''
+        print('Checking categories...')
         data = self.X_train.copy()
         nrows = len(data)
         dropped = []
@@ -189,6 +190,7 @@ class DataTreatment():
         None.
 
         '''
+        print('Encoding...')
         catEncoder = ce.CatBoostEncoder(
             drop_invariant=True, return_df=True, random_state=2020)
         catEncoder.fit(self.X_train, self.y_train)
@@ -204,6 +206,7 @@ class DataTreatment():
         None.
 
         '''
+        print('Scaling features...')
         self.numeric_features = list(
             self.X_train.select_dtypes(include=np.number).columns.values)
         warnings.filterwarnings(

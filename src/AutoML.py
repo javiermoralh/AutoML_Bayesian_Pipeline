@@ -5,6 +5,7 @@ Created on Thu Jan  9 10:39:24 2020
 @author: javier.moral.hernan1
 """
 import pandas as pd
+import numpy as np
 import time
 import warnings
 from sklearn.pipeline import Pipeline
@@ -132,11 +133,11 @@ class AutoML():
                 object_name = 'sgdclassifier'
                 param_dict = {
                     'alpha': Real(1e-8, 10, None),
-                    'l1_ratio': Real(0.0, 0.5, None)}
+                    'l1_ratio': Real(0.001, 0.5, None)}
             for key, value in param_dict.items():
                 pipeline_key = 'stacking__' + object_name + '__' + key
                 param_grid[pipeline_key] = value
-        param_grid.update({'feature_selection__threshold': Real(0, 0.9, None)})
+        param_grid.update({'feature_selection__threshold': Real(0, 0.5)})
         return param_grid
 
     def optimize_pipeline(self):
@@ -155,11 +156,16 @@ class AutoML():
         param_grid = self.get_param_grid()
         bayes_model = BayesSearchCV(
             self.pipeline, param_grid, scoring='roc_auc', cv=3, refit=True,
-            n_jobs=-1, verbose=10, iid=True, return_train_score=True,
-            n_points=25, _iter=40)
-
+            n_jobs=-1, verbose=0, iid=True, return_train_score=True,
+            n_points=35, n_iter=50)
         print('Training full pipeline...')
-        bayes_model.fit(X_train_aux, y_train_aux)
+        def on_step(optim_result):
+            score = bayes_model.best_score_
+            print("Best Score: %s" % score)
+            if score >= 0.99:
+                print('Interrupting!')
+                return True
+        bayes_model.fit(X_train_aux, y_train_aux, callback=on_step)
         self.best_params = bayes_model.best_params_
 
         # Select between the 3 best Bayes combination

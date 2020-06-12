@@ -12,7 +12,11 @@ df = pd.read_csv("data/elephant.csv", ";")
 df = pd.read_csv("data/ring.csv", ";")
 df = pd.read_csv("data/yeast1.csv", ";")
 df = pd.read_csv("data/no_pre_aprobados.csv", ";")
+df = pd.read_csv("data/titanic.csv", ",")
 
 # AutoML execution
-automl = AutoML(data=df, target_name='Class')
+automl = AutoML(data=df, target_name='Survived')
 automl.get_score()
+
+
+df.isnull().sum()
