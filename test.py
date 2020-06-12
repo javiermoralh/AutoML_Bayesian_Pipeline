@@ -18,5 +18,3 @@ df = pd.read_csv("data/titanic.csv", ",")
 automl = AutoML(data=df, target_name='Survived')
 automl.get_score()
 
-
-df.isnull().sum()

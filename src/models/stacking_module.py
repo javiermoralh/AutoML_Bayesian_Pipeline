@@ -8,6 +8,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import SGDClassifier
+from xgboost import XGBClassifier
 from mlxtend.classifier import StackingClassifier
 
 
@@ -35,7 +36,8 @@ class Stacking():
                        'svc': SVC(),
                        'elastic_net': SGDClassifier(
                            penalty='elasticnet', loss = 'modified_huber'),
-                       'logistic_regression': LogisticRegression()}
+                       'logistic_regression': LogisticRegression(),
+                       'extreme_gradient_boosting': XGBClassifier()}
         self.classifiers_list = classifiers
         self.meta_classifier = meta_classifier
         self.clfs, self.mc = self.map_models()

@@ -4,8 +4,6 @@ Created on Thu Jan  9 10:39:24 2020
 
 @author: javier.moral.hernan1
 """
-import pandas as pd
-import numpy as np
 import time
 import warnings
 from sklearn.pipeline import Pipeline
@@ -16,13 +14,14 @@ from skopt import BayesSearchCV
 from src.feature_selection.feature_selection_module import FeatureSelection
 from src.preprocessing.datatreatment_module import DataTreatment
 from src.models.stacking_module import Stacking
-from skopt.space import Real, Integer
+from skopt.space import Real, Integer, Categorical
 warnings.filterwarnings('ignore')
 
 
 class AutoML():
     '''
-    This class ...
+    This class performs all the steps needed to run an AutoML process with a
+    Bayesian Pipeline Approach.
 
     Parameters
     ----------
@@ -75,8 +74,8 @@ class AutoML():
         '''
         self.classifiers = ['random_forest',
                             'gradient_boosting',
-                            'elastic_net']
-        self.mc = 'gradient_boosting'
+                            'extreme_gradient_boosting']
+        self.mc = 'extreme_gradient_boosting'
         self.stacking = Stacking(self.classifiers, self.mc)
 
     def compile_pipeline(self):
@@ -115,7 +114,7 @@ class AutoML():
                     'max_depth': Integer(10, 50, None),
                     'min_samples_split': Integer(2, 20, None),
                     'n_estimators': Integer(10, 200, None),
-                    'bootstrap': [True, False]}
+                    'bootstrap': Categorical([True, False])}
             if element == 'gradient_boosting':
                 object_name = 'gradientboostingclassifier'
                 param_dict = {
@@ -124,6 +123,13 @@ class AutoML():
                     'n_iter_no_change': Integer(1, 3, None),
                     'min_samples_split': Integer(3, 30, None),
                     'n_estimators': Integer(10, 200, None)}
+            if element == 'extreme_gradient_boosting':
+                object_name = 'xgbclassifier'
+                param_dict = {
+                    'max_depth': Integer(10, 50, None),
+                    'learning_rate': Real(0.0001, 0.1, None),
+                    'booster': Categorical(['gbtree', 'gblinear', 'dart']),
+                    'gamma': Real(0.001, 1, None)}
             if element == 'svc':
                 object_name = 'svc'
                 param_dict = {
@@ -159,31 +165,15 @@ class AutoML():
             n_jobs=-1, verbose=0, iid=True, return_train_score=True,
             n_points=35, n_iter=50)
         print('Training full pipeline...')
+
         def on_step(optim_result):
             score = bayes_model.best_score_
-            print("Best Score: %s" % score)
+            print("Best Score: {}".format(round(score, 4)))
             if score >= 0.99:
                 print('Interrupting!')
                 return True
         bayes_model.fit(X_train_aux, y_train_aux, callback=on_step)
         self.best_params = bayes_model.best_params_
-
-        # Select between the 3 best Bayes combination
-        # aux_params = pd.DataFrame(
-        #     self.bayes_model.cv_results_).sort_values(
-        #         by='mean_test_score', ascending=False)
-        # combinations = [aux_params.iloc[0]['params'],
-        #                 aux_params.iloc[1]['params'],
-        #                 aux_params.iloc[2]['params']]
-        # aucs_val = []
-        # for combination in combinations:
-        #     self.pipeline.set_params(**combination)
-        #     self.pipeline.fit(X_train_aux, y_train_aux)
-        #     preds_comb = self.pipeline.predict(X_val)
-        #     aucs_val.append(roc_auc_score(y_val, preds_comb))
-        # print(['%.4f' % elem for elem in aucs_val])
-        # self.best_params = aux_params['params'].iloc[
-        #     aucs_val.index(max(aucs_val))]
 
     def select_best_model(self):
         '''
@@ -195,9 +185,8 @@ class AutoML():
         None.
 
         '''
-        # Fit best model
-        (X_train_aux, X_val,
-         y_train_aux, y_val) = train_test_split(
+        # Fit models
+        X_train_aux, X_val, y_train_aux, y_val = train_test_split(
              self.X_train, self.y_train, test_size=0.25,
              random_state=42, stratify=self.y_train)
         self.pipeline.set_params(**self.best_params)
